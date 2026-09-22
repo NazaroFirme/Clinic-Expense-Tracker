@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { Link, Route, Switch, Router as WouterRouter, useLocation, useRoute } from 'wouter';
+import { Link, Redirect, Route, Switch, Router as WouterRouter, useLocation, useRoute } from 'wouter';
 import {
   ArrowDownRight, BarChart3, Bell, Check, CheckCircle2, ChevronRight,
-  CircleDollarSign, FileText, Filter, HelpCircle, LayoutDashboard, Loader2,
-  Mail, Pencil, PieChart, Plus, ReceiptText, Search, Settings as SettingsIcon,
+  CircleDollarSign, Eye, EyeOff, FileText, Filter, HelpCircle, LayoutDashboard, Loader2,
+  LogOut, Pencil, PieChart, Plus, ReceiptText, Search, Settings as SettingsIcon,
   Trash2, TrendingUp, Wallet, X, Zap,
 } from 'lucide-react';
 import {
@@ -53,7 +53,47 @@ function expenseDateInputValue(value: Date | string) {
 }
 
 function initials(name?: string) {
-  return (name || 'Ana Martins').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+  return (name || 'ELO').split(/[.\s]+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+}
+
+type SessionUser = { username: string; role: string; mustChangePassword: boolean };
+
+async function apiJson(path: string, init?: RequestInit) {
+  const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
+  if (res.status === 401) {
+    const error = new Error('unauthorized') as Error & { status?: number };
+    error.status = 401;
+    throw error;
+  }
+  if (!res.ok) throw new Error(`request_failed_${res.status}`);
+  return res.json();
+}
+
+function useSession() {
+  const [me, setMe] = useState<SessionUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      setMe(await apiJson('/api/me'));
+    } catch {
+      setMe(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void refresh(); }, []);
+  const logout = async () => {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch { /* offline: limpa local */ }
+    setMe(null);
+  };
+  return { me, loading, refresh, logout };
+}
+
+function Protected({ me, children }: { me: SessionUser | null; children: ReactNode }) {
+  if (!me) return <Redirect to="/" />;
+  if (me.mustChangePassword) return <Redirect to="/trocar-senha" />;
+  return <>{children}</>;
 }
 
 function useFinanceActions() {
@@ -90,12 +130,13 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
   </nav>;
 }
 
-function AppShell({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+function AppShell({ children, me, onLogout }: { children: ReactNode; me: SessionUser; onLogout: () => void }) {
+  const [location, setLocation] = useLocation();
   const [info, setInfo] = useState<'help' | 'notifications' | null>(null);
   const settings = useGetSettings();
   const clinic = settings.data?.clinicName || 'ELO Clínica';
-  const owner = settings.data?.ownerName || 'Ana Martins';
+  const owner = settings.data?.ownerName || me.username;
+  const sair = async () => { await onLogout(); setLocation('/'); };
   const title = location === '/dashboard' ? 'Visão geral' : navItems.find((item) => item.href === location)?.label || 'Configurações';
   return <div className="app-shell">
     <aside className="sidebar">
@@ -106,6 +147,7 @@ function AppShell({ children }: { children: ReactNode }) {
       <Link href="/settings" className={`nav-link ${location === '/settings' ? 'active' : ''}`} data-testid="link-nav-configuracoes"><SettingsIcon /><span>Configurações</span></Link>
       <div className="sidebar-footer">
         <div className="owner-chip"><span className="avatar">{initials(owner)}</span><span><strong className="block">{owner}</strong><small className="block" style={{ color: 'hsl(39 30% 72%)' }}>{clinic}</small></span></div>
+        <button className="btn btn-ghost btn-logout" onClick={() => void sair()} data-testid="button-logout"><LogOut /><span>{me.username} · Sair</span></button>
       </div>
     </aside>
     <div className="main-wrap">
@@ -289,14 +331,93 @@ function SuccessToast({ message }: { message: string }) {
   return <div className="toast-success" data-testid="status-success"><CheckCircle2 />{message}</div>;
 }
 
-function Login() {
-  const [, setLocation] = useLocation(); const [email, setEmail] = useState(''); const [error, setError] = useState('');
-  const submit = (event: FormEvent) => { event.preventDefault(); if (!email.includes('@')) { setError('Digite um e-mail válido para entrar.'); return; } setLocation('/dashboard'); };
-  return <div className="login-page"><section className="login-art"><Brand /><div className="login-quote"><h1>Decisões mais tranquilas começam aqui.</h1><p>Uma visão simples e humana para cuidar do dinheiro que cuida de tanta gente.</p></div><div className="login-points"><span><CheckCircle2 /> Feito para clínicas pequenas</span><span><CheckCircle2 /> Dados sempre à mão</span></div></section><section className="login-form-side"><form className="login-form" onSubmit={submit}><div className="eyebrow">Bem-vinda de volta</div><h2>Entrar no ELO</h2><p>Acesse seu espaço financeiro. Para esta demonstração, basta informar seu e-mail.</p><div className="field"><label htmlFor="login-email">Seu e-mail</label><div style={{ position: 'relative' }}><Mail style={{ position: 'absolute', left: 11, top: 11, width: 15, color: 'hsl(var(--muted-foreground))' }} /><input id="login-email" className="input" style={{ paddingLeft: 34 }} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@clinicadomelhor.com.br" data-testid="input-login-email" /></div></div>{error && <div style={{ color: 'hsl(var(--destructive))', fontSize: 11 }} data-testid="status-login-error">{error}</div>}<button className="btn btn-primary" data-testid="button-login">Entrar no meu espaço <ChevronRight /></button><button type="button" className="btn btn-secondary" onClick={() => setLocation('/dashboard')} data-testid="button-demo-access">Acessar demonstração</button><div className="text-center mt-6" style={{ color: 'hsl(var(--muted-foreground))', fontSize: 10 }}>Ambiente seguro para sua rotina financeira.</div></form></section></div>;
+function Login({ onLoggedIn }: { onLoggedIn: () => Promise<void> }) {
+  const [, setLocation] = useLocation();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    if (!username.trim() || !password) { setError('Informe usuário e senha.'); return; }
+    setPending(true);
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.status === 429) { setError('Muitas tentativas. Aguarde um minuto e tente de novo.'); return; }
+      if (!res.ok) { setError('Usuário ou senha incorretos.'); return; }
+      const logged: SessionUser = await res.json();
+      await onLoggedIn();
+      setLocation(logged.mustChangePassword ? '/trocar-senha' : '/dashboard');
+    } catch {
+      setError('Não foi possível conectar. Tente novamente.');
+    } finally {
+      setPending(false);
+    }
+  };
+  return <div className="login-page"><section className="login-art"><Brand /><div className="login-quote"><h1>Decisões mais tranquilas começam aqui.</h1><p>Uma visão simples e humana para cuidar do dinheiro que cuida de tanta gente.</p></div><div className="login-points"><span><CheckCircle2 /> Feito para clínicas pequenas</span><span><CheckCircle2 /> Dados sempre à mão</span></div></section><section className="login-form-side"><form className="login-form" onSubmit={(e) => void submit(e)}><div className="eyebrow">Bem-vinda de volta</div><h2>Entrar no ELO</h2><p>Acesse seu espaço financeiro com seu usuário e senha.</p><div className="field"><label htmlFor="login-user">Usuário</label><input id="login-user" className="input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="seu usuário" autoComplete="username" data-testid="input-login-user" /></div><div className="field"><label htmlFor="login-pass">Senha</label><div style={{ position: 'relative' }}><input id="login-pass" className="input" style={{ paddingRight: 40 }} type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" data-testid="input-login-pass" /><button type="button" className="btn btn-ghost login-show" onClick={() => setShow((s) => !s)} aria-label={show ? 'Ocultar senha' : 'Mostrar senha'} data-testid="button-toggle-pass">{show ? <EyeOff /> : <Eye />}</button></div></div>{error && <div className="login-error" data-testid="status-login-error">{error}</div>}<button className="btn btn-primary" disabled={pending} data-testid="button-login">{pending ? <Loader2 className="animate-spin" /> : null} Entrar no meu espaço <ChevronRight /></button></form></section></div>;
+}
+
+function ChangePassword({ me, onDone }: { me: SessionUser; onDone: () => Promise<void> }) {
+  const [, setLocation] = useLocation();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    if (next.length < 6) { setError('A nova senha precisa de ao menos 6 caracteres.'); return; }
+    if (next !== confirm) { setError('A confirmação não confere.'); return; }
+    setPending(true);
+    try {
+      const res = await fetch('/api/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      if (res.status === 401) { setError('A senha atual não confere ou a sessão expirou.'); return; }
+      if (!res.ok) { setError('Não foi possível trocar a senha. Tente de novo.'); return; }
+      await onDone();
+      setLocation('/dashboard');
+    } catch {
+      setError('Não foi possível conectar. Tente novamente.');
+    } finally {
+      setPending(false);
+    }
+  };
+  return <div className="login-simple-page"><form className="login-card" onSubmit={(e) => void submit(e)}>
+    <span className="brand-mark login-card-mark">e</span>
+    <h1>Trocar senha</h1>
+    <p className="login-sub">Olá, {me.username}. Defina sua senha de acesso.</p>
+    <div className="field"><label htmlFor="cp-current">Senha atual</label><input id="cp-current" className="input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" data-testid="input-current-pass" /></div>
+    <div className="field"><label htmlFor="cp-new">Nova senha (mín. 6 caracteres)</label><input id="cp-new" className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" data-testid="input-new-pass" /></div>
+    <div className="field"><label htmlFor="cp-confirm">Confirmar nova senha</label><input id="cp-confirm" className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" data-testid="input-confirm-pass" /></div>
+    {error && <div className="login-error" data-testid="status-change-error">{error}</div>}
+    <button className="btn btn-primary login-submit" disabled={pending} data-testid="button-change-pass">{pending ? <Loader2 className="animate-spin" /> : null} Definir senha <ChevronRight /></button>
+  </form></div>;
 }
 
 function Router() {
-  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={Login} /><Route path="/dashboard"><AppShell><Dashboard /></AppShell></Route><Route path="/expenses"><AppShell><Expenses /></AppShell></Route><Route path="/categories"><AppShell><Categories /></AppShell></Route><Route path="/reports"><AppShell><Reports /></AppShell></Route><Route path="/settings"><AppShell><Settings /></AppShell></Route><Route component={NotFound} /></Switch></ErrorBoundary>;
+  const session = useSession();
+  if (session.loading) return <div className="login-simple-page"><Loader2 className="animate-spin" data-testid="state-session-loading" /></div>;
+  const shell = (children: ReactNode) => <Protected me={session.me}><AppShell me={session.me!} onLogout={session.logout}>{children}</AppShell></Protected>;
+  return <ErrorBoundary resetKey={window.location.pathname}><Switch>
+    <Route path="/trocar-senha">{session.me ? (session.me.mustChangePassword ? <ChangePassword me={session.me} onDone={session.refresh} /> : <Redirect to="/dashboard" />) : <Redirect to="/" />}</Route>
+    <Route path="/">{session.me ? (session.me.mustChangePassword ? <Redirect to="/trocar-senha" /> : <Redirect to="/dashboard" />) : <Login onLoggedIn={session.refresh} />}</Route>
+    <Route path="/dashboard">{shell(<Dashboard />)}</Route>
+    <Route path="/expenses">{shell(<Expenses />)}</Route>
+    <Route path="/categories">{shell(<Categories />)}</Route>
+    <Route path="/reports">{shell(<Reports />)}</Route>
+    <Route path="/settings">{shell(<Settings />)}</Route>
+    <Route component={NotFound} />
+  </Switch></ErrorBoundary>;
 }
 
 function App() {

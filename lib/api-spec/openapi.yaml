@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Session authentication operations
   - name: dashboard
     description: Financial overview operations
   - name: expenses
@@ -19,6 +21,81 @@ tags:
   - name: settings
     description: Clinic settings operations
 paths:
+  /login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Open a session (sets httpOnly cookie)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "401":
+          description: Invalid credentials
+        "429":
+          description: Too many attempts
+  /logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Close the current session
+      responses:
+        "200":
+          description: Logged out
+  /me:
+    get:
+      operationId: getSession
+      tags: [auth]
+      summary: Current session user
+      responses:
+        "200":
+          description: Session user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "401":
+          description: No valid session
+  /change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change own password (rotates session)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 6
+      responses:
+        "200":
+          description: Password changed
+        "400":
+          description: New password too short
+        "401":
+          description: No session or current password mismatch
   /healthz:
     get:
       operationId: healthCheck
@@ -430,6 +507,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Expense"
+    SessionUser:
+      type: object
+      required: [username, role, mustChangePassword]
+      properties:
+        username:
+          type: string
+        role:
+          type: string
+        mustChangePassword:
+          type: boolean
     ClinicSettings:
       type: object
       required: [clinicName, monthlyBudget, ownerName, email]
