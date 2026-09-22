@@ -56,7 +56,19 @@ function initials(name?: string) {
   return (name || 'ELO').split(/[.\s]+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 }
 
-type SessionUser = { username: string; role: string; mustChangePassword: boolean };
+function displayName(username?: string) {
+  const first = String(username || '').split(/[._\s-]+/).filter(Boolean)[0] || 'ELO';
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return 'Bom dia';
+  if (hour >= 12 && hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+type SessionUser = { username: string; role: string };
 
 async function apiJson(path: string, init?: RequestInit) {
   const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
@@ -92,7 +104,6 @@ function useSession() {
 
 function Protected({ me, children }: { me: SessionUser | null; children: ReactNode }) {
   if (!me) return <Redirect to="/" />;
-  if (me.mustChangePassword) return <Redirect to="/trocar-senha" />;
   return <>{children}</>;
 }
 
@@ -133,6 +144,12 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
 function AppShell({ children, me, onLogout }: { children: ReactNode; me: SessionUser; onLogout: () => void }) {
   const [location, setLocation] = useLocation();
   const [info, setInfo] = useState<'help' | 'notifications' | null>(null);
+  // Relógio da topbar: atualiza a data sozinho (vira à meia-noite sem reload)
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setToday(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const settings = useGetSettings();
   const clinic = settings.data?.clinicName || 'ELO Clínica';
   const owner = settings.data?.ownerName || me.username;
@@ -154,7 +171,7 @@ function AppShell({ children, me, onLogout }: { children: ReactNode; me: Session
       <header className="topbar">
         <div><div className="top-kicker">ELO Clínica / financeiro</div><div className="top-title">{title}</div></div>
         <div className="flex items-center gap-3">
-          <span className="top-kicker hidden sm:block">{new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</span>
+          <span className="top-kicker hidden sm:block">{new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(today)}</span>
           <button className="btn btn-ghost" aria-label="Ajuda" onClick={() => setInfo('help')} data-testid="button-help"><HelpCircle /></button>
           <button className="btn btn-ghost" aria-label="Notificações" onClick={() => setInfo('notifications')} data-testid="button-notifications"><Bell /></button>
         </div>
@@ -187,7 +204,7 @@ function MetricCard({ icon: Icon, label, value, note, accent }: { icon: typeof W
   return <div className="metric-card" data-testid={`metric-${label.toLowerCase().replaceAll(' ', '-')}`}><div className="metric-label"><Icon />{label}</div><div className="metric-value" style={accent ? { color: 'hsl(12 61% 49%)' } : undefined}>{value}</div>{note && <div className="metric-note">{note}</div>}</div>;
 }
 
-function Dashboard() {
+function Dashboard({ me }: { me: SessionUser }) {
   const summary = useGetDashboardSummary({ month: monthKey });
   const [location, setLocation] = useLocation();
   const data = summary.data;
@@ -195,7 +212,7 @@ function Dashboard() {
   if (summary.isLoading) return <Page><PageIntro eyebrow="seu mês em foco" title="Visão geral" description="Acompanhe as decisões financeiras da clínica com calma." /><LoadingState rows={4} /></Page>;
   if (summary.isError || !data) return <Page><PageIntro eyebrow="seu mês em foco" title="Visão geral" description="Acompanhe as decisões financeiras da clínica com calma." /><ErrorState retry={() => summary.refetch()} /></Page>;
   return <Page>
-    <PageIntro eyebrow={monthLabel} title="Bom dia, Ana." description="Aqui está o pulso financeiro da clínica. Um passo de cada vez." action={<button className="btn btn-primary" onClick={() => setLocation('/expenses?new=1')} data-testid="button-add-expense"><Plus /> Registrar despesa</button>} />
+    <PageIntro eyebrow={monthLabel} title={`${greeting()}, ${displayName(me.username)}.`} description="Aqui está o pulso financeiro da clínica. Um passo de cada vez." action={<button className="btn btn-primary" onClick={() => setLocation('/expenses?new=1')} data-testid="button-add-expense"><Plus /> Registrar despesa</button>} />
     <div className="grid metrics-grid">
       <MetricCard icon={Wallet} label="Total gasto" value={money.format(data.totalSpent)} note={`${data.expenseCount} lançamentos no mês`} />
       <MetricCard icon={TrendingUp} label="Orçamento utilizado" value={`${data.budgetUsedPct.toFixed(1)}%`} note={`de ${money.format(data.monthlyBudget)} planejados`} accent />
@@ -351,40 +368,7 @@ function Login({ onLoggedIn }: { onLoggedIn: () => Promise<void> }) {
       });
       if (res.status === 429) { setError('Muitas tentativas. Aguarde um minuto e tente de novo.'); return; }
       if (!res.ok) { setError('Usuário ou senha incorretos.'); return; }
-      const logged: SessionUser = await res.json();
       await onLoggedIn();
-      setLocation(logged.mustChangePassword ? '/trocar-senha' : '/dashboard');
-    } catch {
-      setError('Não foi possível conectar. Tente novamente.');
-    } finally {
-      setPending(false);
-    }
-  };
-  return <div className="login-page"><section className="login-art"><Brand /><div className="login-quote"><h1>Decisões mais tranquilas começam aqui.</h1><p>Uma visão simples e humana para cuidar do dinheiro que cuida de tanta gente.</p></div><div className="login-points"><span><CheckCircle2 /> Feito para clínicas pequenas</span><span><CheckCircle2 /> Dados sempre à mão</span></div></section><section className="login-form-side"><form className="login-form" onSubmit={(e) => void submit(e)}><div className="eyebrow">Bem-vinda de volta</div><h2>Entrar no ELO</h2><p>Acesse seu espaço financeiro com seu usuário e senha.</p><div className="field"><label htmlFor="login-user">Usuário</label><input id="login-user" className="input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="seu usuário" autoComplete="username" data-testid="input-login-user" /></div><div className="field"><label htmlFor="login-pass">Senha</label><div style={{ position: 'relative' }}><input id="login-pass" className="input" style={{ paddingRight: 40 }} type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" data-testid="input-login-pass" /><button type="button" className="btn btn-ghost login-show" onClick={() => setShow((s) => !s)} aria-label={show ? 'Ocultar senha' : 'Mostrar senha'} data-testid="button-toggle-pass">{show ? <EyeOff /> : <Eye />}</button></div></div>{error && <div className="login-error" data-testid="status-login-error">{error}</div>}<button className="btn btn-primary" disabled={pending} data-testid="button-login">{pending ? <Loader2 className="animate-spin" /> : null} Entrar no meu espaço <ChevronRight /></button></form></section></div>;
-}
-
-function ChangePassword({ me, onDone }: { me: SessionUser; onDone: () => Promise<void> }) {
-  const [, setLocation] = useLocation();
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
-  const [pending, setPending] = useState(false);
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
-    if (next.length < 6) { setError('A nova senha precisa de ao menos 6 caracteres.'); return; }
-    if (next !== confirm) { setError('A confirmação não confere.'); return; }
-    setPending(true);
-    try {
-      const res = await fetch('/api/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword: current, newPassword: next }),
-      });
-      if (res.status === 401) { setError('A senha atual não confere ou a sessão expirou.'); return; }
-      if (!res.ok) { setError('Não foi possível trocar a senha. Tente de novo.'); return; }
-      await onDone();
       setLocation('/dashboard');
     } catch {
       setError('Não foi possível conectar. Tente novamente.');
@@ -392,16 +376,7 @@ function ChangePassword({ me, onDone }: { me: SessionUser; onDone: () => Promise
       setPending(false);
     }
   };
-  return <div className="login-simple-page"><form className="login-card" onSubmit={(e) => void submit(e)}>
-    <span className="brand-mark login-card-mark">e</span>
-    <h1>Trocar senha</h1>
-    <p className="login-sub">Olá, {me.username}. Defina sua senha de acesso.</p>
-    <div className="field"><label htmlFor="cp-current">Senha atual</label><input id="cp-current" className="input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" data-testid="input-current-pass" /></div>
-    <div className="field"><label htmlFor="cp-new">Nova senha (mín. 6 caracteres)</label><input id="cp-new" className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" data-testid="input-new-pass" /></div>
-    <div className="field"><label htmlFor="cp-confirm">Confirmar nova senha</label><input id="cp-confirm" className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" data-testid="input-confirm-pass" /></div>
-    {error && <div className="login-error" data-testid="status-change-error">{error}</div>}
-    <button className="btn btn-primary login-submit" disabled={pending} data-testid="button-change-pass">{pending ? <Loader2 className="animate-spin" /> : null} Definir senha <ChevronRight /></button>
-  </form></div>;
+  return <div className="login-page"><section className="login-art"><Brand /><div className="login-quote"><h1>Decisões mais tranquilas começam aqui.</h1><p>Uma visão simples e humana para cuidar do dinheiro que cuida de tanta gente.</p></div><div className="login-points"><span><CheckCircle2 /> Feito para clínicas pequenas</span><span><CheckCircle2 /> Dados sempre à mão</span></div></section><section className="login-form-side"><form className="login-form" onSubmit={(e) => void submit(e)}><div className="eyebrow">Bem-vinda de volta</div><h2>Entrar no ELO</h2><p>Acesse seu espaço financeiro com seu usuário e senha.</p><div className="field"><label htmlFor="login-user">Usuário</label><input id="login-user" className="input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="seu usuário" autoComplete="username" data-testid="input-login-user" /></div><div className="field"><label htmlFor="login-pass">Senha</label><div style={{ position: 'relative' }}><input id="login-pass" className="input" style={{ paddingRight: 40 }} type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" data-testid="input-login-pass" /><button type="button" className="btn btn-ghost login-show" onClick={() => setShow((s) => !s)} onMouseDown={(e) => e.preventDefault()} aria-label={show ? 'Ocultar senha' : 'Mostrar senha'} aria-pressed={show} data-testid="button-toggle-pass">{show ? <EyeOff /> : <Eye />}</button></div></div>{error && <div className="login-error" data-testid="status-login-error">{error}</div>}<button className="btn btn-primary" disabled={pending} data-testid="button-login">{pending ? <Loader2 className="animate-spin" /> : null} Entrar no meu espaço <ChevronRight /></button></form></section></div>;
 }
 
 function Router() {
@@ -409,9 +384,8 @@ function Router() {
   if (session.loading) return <div className="login-simple-page"><Loader2 className="animate-spin" data-testid="state-session-loading" /></div>;
   const shell = (children: ReactNode) => <Protected me={session.me}><AppShell me={session.me!} onLogout={session.logout}>{children}</AppShell></Protected>;
   return <ErrorBoundary resetKey={window.location.pathname}><Switch>
-    <Route path="/trocar-senha">{session.me ? (session.me.mustChangePassword ? <ChangePassword me={session.me} onDone={session.refresh} /> : <Redirect to="/dashboard" />) : <Redirect to="/" />}</Route>
-    <Route path="/">{session.me ? (session.me.mustChangePassword ? <Redirect to="/trocar-senha" /> : <Redirect to="/dashboard" />) : <Login onLoggedIn={session.refresh} />}</Route>
-    <Route path="/dashboard">{shell(<Dashboard />)}</Route>
+    <Route path="/">{session.me ? <Redirect to="/dashboard" /> : <Login onLoggedIn={session.refresh} />}</Route>
+    <Route path="/dashboard">{shell(<Dashboard me={session.me!} />)}</Route>
     <Route path="/expenses">{shell(<Expenses />)}</Route>
     <Route path="/categories">{shell(<Categories />)}</Route>
     <Route path="/reports">{shell(<Reports />)}</Route>

@@ -221,7 +221,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .login-sub { color:hsl(var(--muted-foreground)); font-size:11px; letter-spacing:.12em; text-transform:uppercase; margin:0 0 26px; }
 .login-card .field { margin-bottom:15px; }
 .login-submit { width:100%; justify-content:center; padding:12px; margin-top:8px; }
-.login-show { position:absolute; right:4px; top:50%; transform:translateY(-50%); }
+.login-show { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:30px; height:30px; padding:0; justify-content:center; }
+.login-show:hover, .login-show:active { transform:translateY(-50%); background:hsl(var(--muted) / .6); }
+.login-show svg { width:16px; height:16px; }
 .login-error { background:hsl(var(--destructive) / .08); border:1px solid hsl(var(--destructive) / .25); color:hsl(var(--destructive)); border-radius:8px; padding:9px 12px; font-size:12px; margin:4px 0 6px; }
 .btn-logout { width:100%; justify-content:flex-start; margin-top:8px; font-size:12px; }
 .mobile-nav { display:none; }
