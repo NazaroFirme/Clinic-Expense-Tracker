@@ -210,6 +210,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .login-form p { color:hsl(var(--muted-foreground)); font-size:13px; line-height:1.6; margin:0 0 27px; }
 .login-form .field { margin-bottom:17px; }
 .login-form .btn { width:100%; justify-content:center; margin-top:9px; padding:12px; }
+/* Login na paleta da logo: botão navy (sem verde) + marca pêssego */
+.login-form .btn-primary { background:hsl(212 35% 31%); box-shadow:0 5px 13px hsl(212 35% 20% / .28); }
+.login-form .btn-primary:hover { background:hsl(212 38% 23%); }
 /* ── Login simplificado (cartão único, sem painel de marketing) ── */
 .login-simple-page { min-height:100dvh; display:grid; place-items:center; padding:24px 16px; background:hsl(var(--background)); }
 .login-card { width:min(400px,100%); background:hsl(var(--card)); border:1px solid hsl(var(--border)); border-radius:18px; padding:40px 36px; box-shadow:0 18px 50px hsl(164 31% 20% / .10); }
