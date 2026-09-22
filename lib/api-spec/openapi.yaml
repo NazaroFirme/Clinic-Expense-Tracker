@@ -10,6 +10,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+    description: Financial overview operations
+  - name: expenses
+    description: Clinic expense operations
+  - name: categories
+    description: Expense category operations
+  - name: settings
+    description: Clinic settings operations
 paths:
   /healthz:
     get:
@@ -24,6 +32,228 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get the financial dashboard summary
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}$"
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List clinic expenses
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ExpenseStatus"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Expense list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Create an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseInput"
+      responses:
+        "201":
+          description: Created expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+  /expenses/{id}:
+    patch:
+      operationId: updateExpense
+      tags: [expenses]
+      summary: Update an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseUpdate"
+      responses:
+        "200":
+          description: Updated expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "404":
+          description: Expense not found
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted expense
+        "404":
+          description: Expense not found
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List expense categories
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create an expense category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Created category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+  /categories/{id}:
+    patch:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update an expense category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryUpdate"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "404":
+          description: Category not found
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete an expense category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted category
+        "400":
+          description: Category is still in use
+        "404":
+          description: Category not found
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get clinic settings
+      responses:
+        "200":
+          description: Clinic settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicSettings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update clinic settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicSettingsUpdate"
+      responses:
+        "200":
+          description: Updated clinic settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicSettings"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +263,201 @@ components:
           type: string
       required:
         - status
+    ExpenseStatus:
+      type: string
+      enum: [paid, pending]
+    PaymentMethod:
+      type: string
+      enum: [pix, credit_card, debit_card, transfer, cash]
+    Category:
+      type: object
+      required: [id, name, color, expenseCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        expenseCount:
+          type: integer
+    CategoryInput:
+      type: object
+      required: [name, color]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+          minLength: 1
+    CategoryUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+          minLength: 1
+    Expense:
+      type: object
+      required:
+        [id, title, categoryId, categoryName, amount, date, status, paymentMethod, notes, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        amount:
+          type: number
+          format: double
+        date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/ExpenseStatus"
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ExpenseInput:
+      type: object
+      required: [title, categoryId, amount, date, status, paymentMethod]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        categoryId:
+          type: integer
+        amount:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/ExpenseStatus"
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        notes:
+          type: string
+    ExpenseUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        categoryId:
+          type: integer
+        amount:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/ExpenseStatus"
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        notes:
+          type: string
+    CategoryBreakdown:
+      type: object
+      required: [categoryId, categoryName, amount, percentage, color]
+      properties:
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        amount:
+          type: number
+          format: double
+        percentage:
+          type: number
+          format: double
+        color:
+          type: string
+    MonthTrend:
+      type: object
+      required: [label, amount]
+      properties:
+        label:
+          type: string
+        amount:
+          type: number
+          format: double
+    DashboardSummary:
+      type: object
+      required:
+        [totalSpent, monthlyBudget, remainingBudget, budgetUsedPct, pendingAmount, expenseCount, byCategory, monthlyTrend, recentExpenses]
+      properties:
+        totalSpent:
+          type: number
+          format: double
+        monthlyBudget:
+          type: number
+          format: double
+        remainingBudget:
+          type: number
+          format: double
+        budgetUsedPct:
+          type: number
+          format: double
+        pendingAmount:
+          type: number
+          format: double
+        expenseCount:
+          type: integer
+        byCategory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryBreakdown"
+        monthlyTrend:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthTrend"
+        recentExpenses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Expense"
+    ClinicSettings:
+      type: object
+      required: [clinicName, monthlyBudget, ownerName, email]
+      properties:
+        clinicName:
+          type: string
+        monthlyBudget:
+          type: number
+          format: double
+        ownerName:
+          type: string
+        email:
+          type: string
+          format: email
+    ClinicSettingsUpdate:
+      type: object
+      properties:
+        clinicName:
+          type: string
+          minLength: 1
+        monthlyBudget:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        ownerName:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
 

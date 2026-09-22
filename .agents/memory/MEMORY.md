@@ -1,0 +1,1 @@
+- [API date normalization](api-date-normalization.md) — Normalize OpenAPI date values before formatting; runtime JSON may still contain ISO strings.
